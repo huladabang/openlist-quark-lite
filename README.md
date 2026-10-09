@@ -37,6 +37,11 @@ Version 0.3.1 changes the downloader from stop-and-go batches to a sliding
 pipeline: while one ordered chunk is sent to the WebDAV client, later chunks
 continue downloading from the CDN.
 
+Version 0.4.0 streams the current range while it is still arriving, starts at
+two workers and adapts between one and the configured maximum according to
+client wait time. The default part size is 2 MiB. Interrupted parts resume from
+the exact received offset and retry up to three times.
+
 ## Origin and license
 
 The Quark API request flow is derived from the `quark_uc` driver in

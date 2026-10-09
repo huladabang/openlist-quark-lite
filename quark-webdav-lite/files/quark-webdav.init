@@ -12,7 +12,7 @@ start_service() {
 	config_get root_id main root_id '0'
 	config_get root_path main root_path '/'
 	config_get parallel main parallel '3'
-	config_get chunk_mb main chunk_mb '10'
+	config_get chunk_mb main chunk_mb '2'
 	config_get username main username 'quark'
 	config_get password main password ''
 	config_get cookie main cookie ''

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/subtle"
 	"encoding/json"
 	"encoding/xml"
@@ -193,38 +192,89 @@ func parseRange(value string, size int64) (int64, int64, bool, error) {
 	return start, end, true, nil
 }
 
-type chunkResult struct { index int; data []byte; err error }
+type chunkPipe struct {
+	mu sync.Mutex
+	cond *sync.Cond
+	data []byte
+	readAt int
+	written int
+	closed bool
+	err error
+	waited time.Duration
+}
+
+func newChunkPipe(size int) *chunkPipe {
+	p := &chunkPipe{data: make([]byte, size)}
+	p.cond = sync.NewCond(&p.mu)
+	return p
+}
+
+func (p *chunkPipe) Write(data []byte) (int, error) {
+	p.mu.Lock(); defer p.mu.Unlock()
+	if p.closed { return 0, io.ErrClosedPipe }
+	n := copy(p.data[p.written:], data); p.written += n; p.cond.Broadcast()
+	if n != len(data) { return n, io.ErrShortWrite }
+	return n, nil
+}
+
+func (p *chunkPipe) Read(data []byte) (int, error) {
+	p.mu.Lock(); defer p.mu.Unlock()
+	for p.readAt == p.written && !p.closed {
+		started := time.Now(); p.cond.Wait(); p.waited += time.Since(started)
+	}
+	if p.readAt < p.written { n := copy(data, p.data[p.readAt:p.written]); p.readAt += n; return n, nil }
+	if p.err != nil { return 0, p.err }
+	return 0, io.EOF
+}
+
+func (p *chunkPipe) CloseWithError(err error) {
+	p.mu.Lock(); p.closed = true; p.err = err; p.cond.Broadcast(); p.mu.Unlock()
+}
+
+func (p *chunkPipe) Waited() time.Duration { p.mu.Lock(); defer p.mu.Unlock(); return p.waited }
 
 func (s *server) parallelCopy(r *http.Request, w io.Writer, download string, start, end int64) error {
 	chunkCount := int((end-start)/s.chunkSize) + 1
-	pending := make(map[int]<-chan chunkResult, s.parallel)
+	pending := make(map[int]*chunkPipe, s.parallel)
 	launch := func(index int) {
-		result := make(chan chunkResult, 1)
-		pending[index] = result
 		chunkStart := start + int64(index)*s.chunkSize
 		chunkEnd := chunkStart+s.chunkSize-1; if chunkEnd > end { chunkEnd = end }
-		go func() { data, err := s.fetchChunk(r, download, chunkStart, chunkEnd); result <- chunkResult{index: index, data: data, err: err} }()
+		pipe := newChunkPipe(int(chunkEnd-chunkStart+1)); pending[index] = pipe
+		go s.fetchChunk(r, download, chunkStart, chunkEnd, pipe)
 	}
-	for i := 0; i < s.parallel && i < chunkCount; i++ { launch(i) }
+	concurrency := min(2, s.parallel); nextToLaunch := 0
+	for nextToLaunch < concurrency && nextToLaunch < chunkCount { launch(nextToLaunch); nextToLaunch++ }
+	stableChunks := 0
 	for index := 0; index < chunkCount; index++ {
-		result := <-pending[index]; delete(pending, index)
-		if result.err != nil { return result.err }
-		if next := index+s.parallel; next < chunkCount { launch(next) }
-		if _, err := io.Copy(w, bytes.NewReader(result.data)); err != nil { return err }
+		pipe := pending[index]
+		if _, err := io.Copy(w, pipe); err != nil { return err }
+		waited := pipe.Waited(); delete(pending, index)
+		if waited > 100*time.Millisecond && concurrency < s.parallel { concurrency++; stableChunks = 0
+		} else if waited < 10*time.Millisecond { stableChunks++
+			if stableChunks >= 4 && concurrency > 1 { concurrency--; stableChunks = 0 }
+		} else { stableChunks = 0 }
+		for nextToLaunch < chunkCount && nextToLaunch-(index+1) < concurrency { launch(nextToLaunch); nextToLaunch++ }
 	}
 	return nil
 }
 
-func (s *server) fetchChunk(r *http.Request, download string, start, end int64) ([]byte, error) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, download, nil); if err != nil { return nil, err }
-	s.client.mu.RLock(); cookie := s.client.cookie; s.client.mu.RUnlock()
-	req.Header.Set("Cookie", cookie); req.Header.Set("Referer", referer); req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
-	resp, err := s.client.http.Do(req); if err != nil { return nil, err }; defer resp.Body.Close()
-	if resp.StatusCode != http.StatusPartialContent { return nil, fmt.Errorf("CDN ignored range %d-%d: HTTP %d", start, end, resp.StatusCode) }
-	expected := end-start+1; data, err := io.ReadAll(io.LimitReader(resp.Body, expected+1)); if err != nil { return nil, err }
-	if int64(len(data)) != expected { return nil, fmt.Errorf("short CDN range %d-%d: got %d bytes", start, end, len(data)) }
-	return data, nil
+func (s *server) fetchChunk(r *http.Request, download string, start, end int64, pipe *chunkPipe) {
+	position := start
+	var finalErr error
+	defer func() { pipe.CloseWithError(finalErr) }()
+	for attempt := 0; attempt < 4 && position <= end; attempt++ {
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, download, nil); if err != nil { finalErr = err; return }
+		s.client.mu.RLock(); cookie := s.client.cookie; s.client.mu.RUnlock()
+		req.Header.Set("Cookie", cookie); req.Header.Set("Referer", referer); req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", position, end))
+		resp, err := s.client.http.Do(req)
+		if err != nil { finalErr = err; time.Sleep(time.Duration(attempt+1)*200*time.Millisecond); continue }
+		if resp.StatusCode != http.StatusPartialContent { finalErr = fmt.Errorf("CDN ignored range %d-%d: HTTP %d", position, end, resp.StatusCode); resp.Body.Close(); time.Sleep(time.Duration(attempt+1)*200*time.Millisecond); continue }
+		n, copyErr := io.CopyBuffer(pipe, io.LimitReader(resp.Body, end-position+1), make([]byte, 128*1024)); resp.Body.Close(); position += n
+		if copyErr == nil && position == end+1 { finalErr = nil; return }
+		if copyErr != nil { finalErr = copyErr } else { finalErr = fmt.Errorf("short CDN range, stopped at %d", position) }
+		time.Sleep(time.Duration(attempt+1)*200*time.Millisecond)
+	}
 }
 
 func (s *server) directoryHTML(w http.ResponseWriter, r *http.Request, dir file) {
@@ -263,7 +313,7 @@ func main() {
 		log.Printf("mounted Quark folder %s (%s)", rootPath, rootID)
 	}
 	parallel, _ := strconv.Atoi(env("QUARK_PARALLEL", "3")); if parallel < 1 { parallel = 1 }; if parallel > 4 { parallel = 4 }
-	chunkMB, _ := strconv.Atoi(env("QUARK_CHUNK_MB", "10")); if chunkMB < 1 { chunkMB = 1 }; if chunkMB > 32 { chunkMB = 32 }
+	chunkMB, _ := strconv.Atoi(env("QUARK_CHUNK_MB", "2")); if chunkMB < 1 { chunkMB = 1 }; if chunkMB > 32 { chunkMB = 32 }
 	s := &server{client: apiClient, rootID: rootID, username: os.Getenv("QUARK_USERNAME"), password: os.Getenv("QUARK_PASSWORD"), parallel: parallel, chunkSize: int64(chunkMB)*1024*1024}
 	log.Printf("quark-webdav %s listening on %s (read-only)", version, listen); log.Fatal(http.ListenAndServe(listen, s))
 }

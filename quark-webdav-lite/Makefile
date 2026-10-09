@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=quark-webdav-lite
-PKG_VERSION:=0.3.1
+PKG_VERSION:=0.4.0
 PKG_RELEASE:=1
 PKG_LICENSE:=AGPL-3.0-only
 PKG_MAINTAINER:=huladabang
