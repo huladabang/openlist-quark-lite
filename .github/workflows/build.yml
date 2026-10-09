@@ -1,0 +1,44 @@
+name: Build OpenList Quark Lite IPK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build aarch64_cortex-a53 package
+        uses: OpenListTeam/openwrt-gh-action-sdk@go1.25
+        env:
+          ARCH: aarch64_cortex-a53-openwrt-24.10
+          FEEDNAME: quark_lite
+          PACKAGES: openlist-quark-lite
+          NO_REFRESH_CHECK: true
+
+      - name: Inspect package
+        run: |
+          find bin/packages/aarch64_cortex-a53/quark_lite -type f -name '*.ipk' -exec ls -lh {} +
+          du -ah bin/packages/aarch64_cortex-a53/quark_lite | sort -h | tail -20
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: OpenList Quark Lite v0.1.${{ github.run_number }}
+          body: |
+            Experimental OpenWrt package based on OpenList 4.2.6.
+
+            - Ordinary Quark storage driver
+            - Official lite frontend
+            - Minimal LuCI service page
+            - WebDAV support
+            - OpenWrt 24.10 / aarch64_cortex-a53
+
+            Check available overlay space before installation.
+          files: bin/packages/aarch64_cortex-a53/quark_lite/*.ipk
