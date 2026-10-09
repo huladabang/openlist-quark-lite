@@ -19,6 +19,12 @@ return view.extend({
 		o = s.option(form.Value, 'root_id', _('夸克根目录 ID'));
 		o.default = '0';
 		o.rmempty = false;
+		o.description = _('通常保持 0。');
+		o = s.option(form.Value, 'root_path', _('挂载目录路径'));
+		o.default = '/';
+		o.rmempty = false;
+		o.placeholder = '/视频';
+		o.description = _('只挂载指定目录，例如 /视频；填写 / 表示整个网盘。名称必须与夸克中的目录完全一致。');
 		o = s.option(form.Value, 'username', _('WebDAV 用户名'));
 		o.default = 'quark';
 		o = s.option(form.Value, 'password', _('WebDAV 密码'));

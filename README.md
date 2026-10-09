@@ -9,6 +9,7 @@ routers. It does **not** embed OpenList, its database, frontend or plugin system
 - Read, stream and seek files (HTTP Range proxy)
 - Optional WebDAV Basic authentication
 - Select a Quark root folder ID
+- Mount a folder by path, for example `/视频`
 - Minimal LuCI configuration page and procd service
 - OpenWrt 24.10 / `aarch64_cortex-a53`
 
@@ -24,6 +25,10 @@ username/password, enable the service and save. Restart the service after a
 configuration change.
 
 Default WebDAV URL: `http://router-address:5244/`
+
+Use **挂载目录路径** to expose only one folder. The default `/` exposes the
+whole drive. Version 0.2.1 also preserves Quark authorization headers across
+cross-domain CDN redirects to avoid the severely throttled fallback path.
 
 ## Origin and license
 

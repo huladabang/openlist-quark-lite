@@ -169,7 +169,7 @@ func (s *server) get(w http.ResponseWriter, r *http.Request) {
 	if value := r.Header.Get("Range"); value != "" { req.Header.Set("Range", value) }
 	resp, err := s.client.http.Do(req); if err != nil { http.Error(w, err.Error(), http.StatusBadGateway); return }; defer resp.Body.Close()
 	for _, key := range []string{"Accept-Ranges", "Content-Length", "Content-Range", "Content-Type", "ETag", "Last-Modified"} { if value := resp.Header.Get(key); value != "" { w.Header().Set(key, value) } }
-	w.WriteHeader(resp.StatusCode); if r.Method == http.MethodGet { _, _ = io.Copy(w, resp.Body) }
+	w.WriteHeader(resp.StatusCode); if r.Method == http.MethodGet { buffer := make([]byte, 1024*1024); _, _ = io.CopyBuffer(w, resp.Body, buffer) }
 }
 
 func (s *server) directoryHTML(w http.ResponseWriter, r *http.Request, dir file) {
@@ -184,6 +184,29 @@ func env(key, fallback string) string { if value := os.Getenv(key); value != "" 
 func main() {
 	listen := env("QUARK_LISTEN", "127.0.0.1:5244"); cookie := os.Getenv("QUARK_COOKIE")
 	if cookie == "" { log.Fatal("QUARK_COOKIE is required") }
-	s := &server{client: &client{http: &http.Client{Timeout: 0}, cookie: cookie}, rootID: env("QUARK_ROOT_ID", "0"), username: os.Getenv("QUARK_USERNAME"), password: os.Getenv("QUARK_PASSWORD")}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 32
+	transport.MaxIdleConnsPerHost = 8
+	transport.ForceAttemptHTTP2 = true
+	httpClient := &http.Client{Transport: transport, Timeout: 0}
+	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) == 0 { return nil }
+		previous := via[len(via)-1]
+		for _, key := range []string{"Cookie", "Referer", "User-Agent", "Range"} {
+			if value := previous.Header.Get(key); value != "" { req.Header.Set(key, value) }
+		}
+		return nil
+	}
+	apiClient := &client{http: httpClient, cookie: cookie}
+	rootID := env("QUARK_ROOT_ID", "0")
+	rootPath := env("QUARK_ROOT_PATH", "/")
+	if strings.Trim(path.Clean("/"+rootPath), "/") != "" {
+		selected, err := apiClient.resolve(rootID, rootPath)
+		if err != nil { log.Fatalf("cannot resolve root path %q: %v", rootPath, err) }
+		if selected.IsFile { log.Fatalf("root path %q is a file, not a directory", rootPath) }
+		rootID = selected.FID
+		log.Printf("mounted Quark folder %s (%s)", rootPath, rootID)
+	}
+	s := &server{client: apiClient, rootID: rootID, username: os.Getenv("QUARK_USERNAME"), password: os.Getenv("QUARK_PASSWORD")}
 	log.Printf("quark-webdav %s listening on %s (read-only)", version, listen); log.Fatal(http.ListenAndServe(listen, s))
 }
