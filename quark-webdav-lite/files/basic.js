@@ -25,6 +25,15 @@ return view.extend({
 		o.rmempty = false;
 		o.placeholder = '/视频';
 		o.description = _('只挂载指定目录，例如 /视频；填写 / 表示整个网盘。名称必须与夸克中的目录完全一致。');
+		o = s.option(form.Value, 'parallel', _('并发下载数'));
+		o.datatype = 'range(1,4)';
+		o.default = '3';
+		o.rmempty = false;
+		o = s.option(form.Value, 'chunk_mb', _('分段大小（MB）'));
+		o.datatype = 'range(1,32)';
+		o.default = '10';
+		o.rmempty = false;
+		o.description = _('默认同时下载 3 个 10MB 分段，约占用 30MB 临时内存。');
 		o = s.option(form.Value, 'username', _('WebDAV 用户名'));
 		o.default = 'quark';
 		o = s.option(form.Value, 'password', _('WebDAV 密码'));

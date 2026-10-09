@@ -7,6 +7,7 @@ routers. It does **not** embed OpenList, its database, frontend or plugin system
 
 - Browse Quark folders through WebDAV or a basic browser page
 - Read, stream and seek files (HTTP Range proxy)
+- Three concurrent 10 MiB CDN ranges by default (configurable from 1–4)
 - Optional WebDAV Basic authentication
 - Select a Quark root folder ID
 - Mount a folder by path, for example `/视频`
@@ -29,6 +30,8 @@ Default WebDAV URL: `http://router-address:5244/`
 Use **挂载目录路径** to expose only one folder. The default `/` exposes the
 whole drive. Version 0.2.1 also preserves Quark authorization headers across
 cross-domain CDN redirects to avoid the severely throttled fallback path.
+Version 0.3.0 adds ordered parallel range fetching. The default temporary
+memory ceiling for an active transfer is about 30 MiB.
 
 ## Origin and license
 
