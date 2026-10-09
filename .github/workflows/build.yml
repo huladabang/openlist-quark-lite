@@ -1,4 +1,4 @@
-name: Build OpenList Quark Lite IPK
+name: Build Quark WebDAV Lite IPK
 
 on:
   workflow_dispatch:
@@ -18,27 +18,29 @@ jobs:
         env:
           ARCH: aarch64_cortex-a53-openwrt-24.10
           FEEDNAME: quark_lite
-          PACKAGES: openlist-quark-lite
+          PACKAGES: quark-webdav-lite
           NO_REFRESH_CHECK: true
 
       - name: Inspect package
         run: |
           find bin/packages/aarch64_cortex-a53/quark_lite -type f -name '*.ipk' -exec ls -lh {} +
           du -ah bin/packages/aarch64_cortex-a53/quark_lite | sort -h | tail -20
+          ipk="$(find bin/packages/aarch64_cortex-a53/quark_lite -type f -name 'quark-webdav-lite*.ipk' -print -quit)"
+          test -n "$ipk"
+          test "$(wc -c < "$ipk")" -lt 15728640
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: OpenList Quark Lite v0.1.${{ github.run_number }}
+          tag_name: v0.2.${{ github.run_number }}
+          name: Quark WebDAV Lite v0.2.${{ github.run_number }}
           body: |
-            Experimental OpenWrt package based on OpenList 4.2.6.
+            First experimental standalone Quark WebDAV build for OpenWrt.
 
-            - Ordinary Quark storage driver
-            - Official lite frontend
-            - Minimal LuCI service page
-            - WebDAV support
+            - Does not contain the OpenList core or frontend
+            - Read-only WebDAV: browse, download, stream and seek
+            - Minimal LuCI configuration page
             - OpenWrt 24.10 / aarch64_cortex-a53
 
-            Check available overlay space before installation.
+            This build intentionally does not support upload, rename or delete.
           files: bin/packages/aarch64_cortex-a53/quark_lite/*.ipk

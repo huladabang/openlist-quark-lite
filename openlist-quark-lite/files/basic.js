@@ -4,34 +4,35 @@
 'require uci';
 
 return view.extend({
-	load: function() {
-		return uci.load('quark-lite');
-	},
-
+	load: function() { return uci.load('quark-webdav'); },
 	render: function() {
-		var m = new form.Map('quark-lite', _('夸克网盘'),
-			_('轻量 OpenList，仅保留普通夸克网盘驱动。启用后通过端口 5244 完成首次设置并添加夸克存储。'));
-		var s = m.section(form.TypedSection, 'quark_lite');
+		var m = new form.Map('quark-webdav', _('夸克 WebDAV'),
+			_('独立轻量服务，不包含 OpenList。首版仅支持浏览和读取文件。保存后请重启服务。'));
+		var s = m.section(form.TypedSection, 'quark_webdav');
 		s.anonymous = true;
 		s.addremove = false;
-
 		var o = s.option(form.Flag, 'enabled', _('启用'));
 		o.rmempty = false;
-
-		o = s.option(form.Value, 'data_dir', _('数据目录'));
-		o.default = '/etc/openlist-quark-lite';
+		o = s.option(form.Value, 'listen', _('监听地址'));
+		o.default = '0.0.0.0:5244';
 		o.rmempty = false;
-
-		o = s.option(form.Value, 'delayed_start', _('延迟启动（秒）'));
-		o.datatype = 'uinteger';
-		o.default = '10';
-
-		o = s.option(form.DummyValue, '_open', _('管理页面'));
+		o = s.option(form.Value, 'root_id', _('夸克根目录 ID'));
+		o.default = '0';
+		o.rmempty = false;
+		o = s.option(form.Value, 'username', _('WebDAV 用户名'));
+		o.default = 'quark';
+		o = s.option(form.Value, 'password', _('WebDAV 密码'));
+		o.password = true;
+		o = s.option(form.Value, 'cookie', _('夸克 Cookie'));
+		o.password = true;
+		o.rmempty = false;
+		o.description = _('从 pan.quark.cn 已登录请求中复制完整 Cookie。凭据只保存在本机配置中。');
+		o = s.option(form.DummyValue, '_url', _('WebDAV 地址'));
 		o.rawhtml = true;
 		o.cfgvalue = function() {
-			return '<a class="btn cbi-button-action" href="http://' + window.location.hostname + ':5244" target="_blank" rel="noreferrer">' + _('打开夸克网盘') + '</a>';
+			var port = (uci.get('quark-webdav', 'main', 'listen') || ':5244').split(':').pop();
+			return '<code>http://' + window.location.hostname + ':' + port + '/</code>';
 		};
-
 		return m.render();
 	}
 });

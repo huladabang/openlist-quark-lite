@@ -1,0 +1,7 @@
+{
+	"luci-app-quark-webdav": {
+		"description": "Manage Quark WebDAV Lite",
+		"read": { "uci": [ "quark-webdav" ] },
+		"write": { "uci": [ "quark-webdav" ] }
+	}
+}

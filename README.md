@@ -1,28 +1,37 @@
-# OpenList Quark Lite for OpenWrt
+# Quark WebDAV Lite for OpenWrt
 
-A space-saving OpenList derivative for OpenWrt. It keeps the ordinary Quark
-cloud-drive driver, the official lite frontend, WebDAV support and a minimal
-LuCI service page.
+A standalone, read-only Quark cloud drive WebDAV gateway for small OpenWrt
+routers. It does **not** embed OpenList, its database, frontend or plugin system.
 
-## Design
+## First release scope
 
-- OpenList backend: v4.2.6
-- Registered storage driver: `quark_uc`
-- Frontend: official OpenList lite frontend
-- Target: OpenWrt 24.10, `aarch64_cortex-a53`
-- One installable package containing the backend, init script and LuCI page
+- Browse Quark folders through WebDAV or a basic browser page
+- Read, stream and seek files (HTTP Range proxy)
+- Optional WebDAV Basic authentication
+- Select a Quark root folder ID
+- Minimal LuCI configuration page and procd service
+- OpenWrt 24.10 / `aarch64_cortex-a53`
 
-The package is experimental. Back up your router before installation and
-check that the overlay has enough free space.
+Writing, uploading, deleting and renaming are intentionally disabled in the
+first release. This keeps the package small and prevents accidental cloud-drive
+changes while the API implementation is being tested.
 
-## License
+## Configuration
 
-OpenList is licensed under AGPL-3.0. This derivative and its complete build
-source are distributed under the same license. The small LuCI integration is
-also released under AGPL-3.0 for a single, unambiguous project license.
+Install the IPK, then open **Services → Quark WebDAV**. Enter the complete
+Cookie copied from an authenticated request at `pan.quark.cn`, choose a WebDAV
+username/password, enable the service and save. Restart the service after a
+configuration change.
 
-Upstream projects:
+Default WebDAV URL: `http://router-address:5244/`
 
-- https://github.com/OpenListTeam/OpenList
-- https://github.com/OpenListTeam/OpenList-Frontend
-- https://github.com/OpenListTeam/OpenList-OpenWRT
+## Origin and license
+
+The Quark API request flow is derived from the `quark_uc` driver in
+[OpenList](https://github.com/OpenListTeam/OpenList), version 4.2.6. OpenList
+and this derivative are licensed under AGPL-3.0-only. No OpenList executable,
+database, web frontend or framework code is included in the IPK.
+
+This software calls an unofficial cloud API that may change at any time. Use it
+only with your own account and do not expose the service directly to the public
+Internet.

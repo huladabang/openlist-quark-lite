@@ -1,88 +1,58 @@
 include $(TOPDIR)/rules.mk
 
-PKG_NAME:=openlist-quark-lite
-PKG_VERSION:=4.2.6
+PKG_NAME:=quark-webdav-lite
+PKG_VERSION:=0.2.0
 PKG_RELEASE:=1
-
-PKG_SOURCE:=openlist-$(PKG_VERSION).tar.gz
-PKG_SOURCE_URL:=https://codeload.github.com/OpenListTeam/OpenList/tar.gz/v$(PKG_VERSION)?
-PKG_HASH:=028694b14ba7368429774f33c1b7eb584b2bf6235fb7d72df371e528a5c6b04c
-PKG_BUILD_DIR:=$(BUILD_DIR)/OpenList-$(PKG_VERSION)
-
-PKG_LICENSE:=AGPL-3.0
-PKG_LICENSE_FILE:=LICENSE
+PKG_LICENSE:=AGPL-3.0-only
 PKG_MAINTAINER:=huladabang
 PKG_BUILD_DEPENDS:=golang/host
 PKG_BUILD_PARALLEL:=1
-PKG_USE_MIPS16:=0
-PKG_BUILD_FLAGS:=no-mips16
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
-define Download/openlist-lite-frontend
-  FILE:=openlist-frontend-dist-lite-v$(PKG_VERSION).tar.gz
-  URL:=https://github.com/OpenListTeam/OpenList-Frontend/releases/download/v$(PKG_VERSION)/
-  HASH:=26368756cdbe4de9972118d8abbb5a7e0b913bb1e5685e64a89a6f07bafccab1
-endef
-
-GO_PKG:=github.com/OpenListTeam/OpenList
-GO_PKG_LDFLAGS:= \
-	-X '$(GO_PKG)/v4/internal/conf.Version=v$(PKG_VERSION)-quark-lite' \
-	-X '$(GO_PKG)/v4/internal/conf.WebVersion=v$(PKG_VERSION)-lite' \
-	-X '$(GO_PKG)/v4/internal/conf.GitAuthor=OpenList Team and Quark Lite contributors' \
-	-X '$(GO_PKG)/v4/internal/conf.GitCommit=quark-lite-r$(PKG_RELEASE)'
+GO_PKG:=github.com/huladabang/openlist-quark-lite
+GO_PKG_BUILD_PKG:=$(GO_PKG)/cmd/quark-webdav
+GO_PKG_LDFLAGS:=-s -w -X main.version=v$(PKG_VERSION)
 
 include $(INCLUDE_DIR)/package.mk
 include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
-define Package/openlist-quark-lite
+define Package/quark-webdav-lite
   SECTION:=net
   CATEGORY:=Network
   SUBMENU:=Web Servers/Proxies
-  TITLE:=OpenList Quark Lite with LuCI
+  TITLE:=Tiny read-only Quark WebDAV server with LuCI
   URL:=https://github.com/huladabang/openlist-quark-lite
   DEPENDS:=$(GO_ARCH_DEPENDS) +ca-bundle +luci-base
-  PROVIDES:=openlist
-  CONFLICTS:=openlist
+  CONFLICTS:=openlist-quark-lite
 endef
 
-define Package/openlist-quark-lite/description
-  Space-saving OpenList build retaining the ordinary Quark cloud drive driver,
-  official lite web interface, WebDAV and a minimal LuCI service page.
+define Package/quark-webdav-lite/description
+  A small standalone, read-only Quark cloud drive WebDAV gateway. It reuses
+  the OpenList Quark API approach without embedding the OpenList core.
 endef
 
-define Package/openlist-quark-lite/conffiles
-/etc/config/quark-lite
-/etc/openlist-quark-lite
+define Package/quark-webdav-lite/conffiles
+/etc/config/quark-webdav
 endef
 
 define Build/Prepare
 	$(call Build/Prepare/Default)
-	printf '%s\n' \
-		'package drivers' \
-		'' \
-		'import _ "github.com/OpenListTeam/OpenList/v4/drivers/quark_uc"' \
-		'' \
-		'func All() {}' \
-		> $(PKG_BUILD_DIR)/drivers/all.go
-	rm -rf $(PKG_BUILD_DIR)/public/dist
-	mkdir -p $(PKG_BUILD_DIR)/public/dist
-	$(TAR) -C $(PKG_BUILD_DIR)/public/dist -xzf $(DL_DIR)/openlist-frontend-dist-lite-v$(PKG_VERSION).tar.gz
+	$(CP) ./src/. $(PKG_BUILD_DIR)/
 endef
 
-define Package/openlist-quark-lite/install
+define Package/quark-webdav-lite/install
 	$(call GoPackage/Package/Install/Bin,$(PKG_INSTALL_DIR))
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/OpenList $(1)/usr/bin/openlist-quark-lite
-	if [ -x /usr/bin/upx ]; then /usr/bin/upx --lzma --best $(1)/usr/bin/openlist-quark-lite; fi
-	$(INSTALL_DIR) $(1)/etc/config $(1)/etc/init.d $(1)/etc/openlist-quark-lite
-	$(INSTALL_CONF) ./files/quark-lite.config $(1)/etc/config/quark-lite
-	$(INSTALL_BIN) ./files/quark-lite.init $(1)/etc/init.d/quark-lite
-	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/quark-lite
-	$(INSTALL_DATA) ./files/basic.js $(1)/www/luci-static/resources/view/quark-lite/basic.js
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/quark-webdav $(1)/usr/bin/quark-webdav
+	$(INSTALL_DIR) $(1)/etc/config $(1)/etc/init.d
+	$(INSTALL_CONF) ./files/quark-webdav.config $(1)/etc/config/quark-webdav
+	$(INSTALL_BIN) ./files/quark-webdav.init $(1)/etc/init.d/quark-webdav
+	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/quark-webdav
+	$(INSTALL_DATA) ./files/basic.js $(1)/www/luci-static/resources/view/quark-webdav/basic.js
 	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d $(1)/usr/share/rpcd/acl.d $(1)/usr/share/ucitrack
-	$(INSTALL_DATA) ./files/luci-app-quark-lite.menu.json $(1)/usr/share/luci/menu.d/luci-app-quark-lite.json
-	$(INSTALL_DATA) ./files/luci-app-quark-lite.acl.json $(1)/usr/share/rpcd/acl.d/luci-app-quark-lite.json
-	$(INSTALL_DATA) ./files/luci-app-quark-lite.ucitrack.json $(1)/usr/share/ucitrack/luci-app-quark-lite.json
+	$(INSTALL_DATA) ./files/luci-app-quark-webdav.menu.json $(1)/usr/share/luci/menu.d/luci-app-quark-webdav.json
+	$(INSTALL_DATA) ./files/luci-app-quark-webdav.acl.json $(1)/usr/share/rpcd/acl.d/luci-app-quark-webdav.json
+	$(INSTALL_DATA) ./files/luci-app-quark-webdav.ucitrack.json $(1)/usr/share/ucitrack/luci-app-quark-webdav.json
 endef
 
-$(eval $(call Download,openlist-lite-frontend))
-$(eval $(call BuildPackage,openlist-quark-lite))
+$(eval $(call BuildPackage,quark-webdav-lite))

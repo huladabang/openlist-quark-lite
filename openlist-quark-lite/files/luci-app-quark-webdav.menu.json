@@ -1,0 +1,8 @@
+{
+	"admin/services/quark-webdav": {
+		"title": "夸克 WebDAV",
+		"order": 70,
+		"action": { "type": "view", "path": "quark-webdav/basic" },
+		"depends": { "acl": [ "luci-app-quark-webdav" ] }
+	}
+}
