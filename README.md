@@ -33,6 +33,10 @@ cross-domain CDN redirects to avoid the severely throttled fallback path.
 Version 0.3.0 adds ordered parallel range fetching. The default temporary
 memory ceiling for an active transfer is about 30 MiB.
 
+Version 0.3.1 changes the downloader from stop-and-go batches to a sliding
+pipeline: while one ordered chunk is sent to the WebDAV client, later chunks
+continue downloading from the CDN.
+
 ## Origin and license
 
 The Quark API request flow is derived from the `quark_uc` driver in

@@ -196,18 +196,21 @@ func parseRange(value string, size int64) (int64, int64, bool, error) {
 type chunkResult struct { index int; data []byte; err error }
 
 func (s *server) parallelCopy(r *http.Request, w io.Writer, download string, start, end int64) error {
-	for batchStart := start; batchStart <= end; {
-		results := make(chan chunkResult, s.parallel)
-		count := 0
-		for i := 0; i < s.parallel && batchStart+int64(i)*s.chunkSize <= end; i++ {
-			chunkStart := batchStart + int64(i)*s.chunkSize; chunkEnd := chunkStart+s.chunkSize-1; if chunkEnd > end { chunkEnd = end }
-			count++
-			go func(index int, from, to int64) { data, err := s.fetchChunk(r, download, from, to); results <- chunkResult{index: index, data: data, err: err} }(i, chunkStart, chunkEnd)
-		}
-		ordered := make([][]byte, count)
-		for range count { result := <-results; if result.err != nil { return result.err }; ordered[result.index] = result.data }
-		for _, data := range ordered { if _, err := io.Copy(w, bytes.NewReader(data)); err != nil { return err } }
-		batchStart += int64(count)*s.chunkSize
+	chunkCount := int((end-start)/s.chunkSize) + 1
+	pending := make(map[int]<-chan chunkResult, s.parallel)
+	launch := func(index int) {
+		result := make(chan chunkResult, 1)
+		pending[index] = result
+		chunkStart := start + int64(index)*s.chunkSize
+		chunkEnd := chunkStart+s.chunkSize-1; if chunkEnd > end { chunkEnd = end }
+		go func() { data, err := s.fetchChunk(r, download, chunkStart, chunkEnd); result <- chunkResult{index: index, data: data, err: err} }()
+	}
+	for i := 0; i < s.parallel && i < chunkCount; i++ { launch(i) }
+	for index := 0; index < chunkCount; index++ {
+		result := <-pending[index]; delete(pending, index)
+		if result.err != nil { return result.err }
+		if next := index+s.parallel; next < chunkCount { launch(next) }
+		if _, err := io.Copy(w, bytes.NewReader(result.data)); err != nil { return err }
 	}
 	return nil
 }
